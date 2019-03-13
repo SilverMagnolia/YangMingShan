@@ -42,6 +42,8 @@
  */
 @property (nonatomic, assign) BOOL shouldReturnImageForSingleSelection;
 
+@property (nonatomic, assign) BOOL allowGIF;
+
 @end
 
 /**

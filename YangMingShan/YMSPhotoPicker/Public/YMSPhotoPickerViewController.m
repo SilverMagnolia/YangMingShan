@@ -220,6 +220,29 @@ static const CGFloat YMSPhotoFetchScaleResizingRatio = 0.75;
         || cell.isSelected) {
         return NO;
     }
+    
+    PHFetchResult *fetchResult = self.currentCollectionItem[@"assets"];
+    PHAsset *asset = fetchResult[indexPath.item-1];
+    
+    
+    NSString * assetUti = [asset valueForKey:@"uniformTypeIdentifier"];
+    NSArray * splitedString = [assetUti componentsSeparatedByString:@"."];
+    
+    if ((self.allowGIF == NO) && (splitedString.count == 3)) {
+        if ([splitedString[2] isEqualToString:@"gif"]) {
+            UIAlertController* alert = [UIAlertController alertControllerWithTitle: nil
+                                                                           message:@"GIF 파일은 첨부가 불가능합니다."
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            
+            UIAlertAction* defaultAction = [UIAlertAction actionWithTitle:@"확인" style:UIAlertActionStyleDefault
+                                                                  handler:^(UIAlertAction * action) {}];
+            
+            [alert addAction:defaultAction];
+            [self presentViewController:alert animated:YES completion:nil];
+            return NO;
+        }
+    }
+    
     if ([cell isKindOfClass:[YMSPhotoCell class]]) {
         YMSPhotoCell *photoCell = (YMSPhotoCell *)cell;
         [photoCell setNeedsAnimateSelection];
@@ -525,59 +548,54 @@ static const CGFloat YMSPhotoFetchScaleResizingRatio = 0.75;
 
 - (void)fetchCollections
 {
-    NSMutableArray *allAblums = [NSMutableArray array];
+    NSMutableArray *allAlbums = [NSMutableArray array];
 
+    PHFetchResult *userAlbums = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum subtype:PHAssetCollectionSubtypeSmartAlbumUserLibrary options:nil];
     PHFetchResult *smartAlbums = [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeSmartAlbum subtype:PHAssetCollectionSubtypeAlbumRegular options:nil];
 
-    __block __weak void (^weakFetchAlbums)(PHFetchResult *collections);
-    void (^fetchAlbums)(PHFetchResult *collections);
-    weakFetchAlbums = fetchAlbums = ^void(PHFetchResult *collections) {
-        // create fecth options
-        PHFetchOptions *options = [PHFetchOptions new];
-        options.predicate = [NSPredicate predicateWithFormat:@"mediaType = %d",PHAssetMediaTypeImage];
-        options.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
-
-        for (PHCollection *collection in collections) {
-            if ([collection isKindOfClass:[PHAssetCollection class]]) {
-                PHAssetCollection *assetCollection = (PHAssetCollection *)collection;
-                PHFetchResult *assetsFetchResult = [PHAsset fetchAssetsInAssetCollection:assetCollection options:options];
-                if (assetsFetchResult.count > 0) {
-                    [allAblums addObject:@{@"collection": assetCollection
-                                           , @"assets": assetsFetchResult}];
-                }
-            }
-            else if ([collection isKindOfClass:[PHCollectionList class]]) {
-                // If there are more sub-folders, dig into the collection to fetch the albums
-                PHCollectionList *collectionList = (PHCollectionList *)collection;
-                PHFetchResult *fetchResult = [PHCollectionList fetchCollectionsInCollectionList:(PHCollectionList *)collectionList options:nil];
-                weakFetchAlbums(fetchResult);
-            }
-        }
-    };
-
-    PHFetchResult *topLevelUserCollections = [PHCollectionList fetchTopLevelUserCollectionsWithOptions:nil];
-    fetchAlbums(topLevelUserCollections);
-
+    // 스마트 앨범(카메라 롤, 최근 추가된 항목, 스크린샷, 셀카, 라이브 포토, 움직이는 항목, 즐겨찾는 사진 등등.)
     for (PHAssetCollection *collection in smartAlbums) {
+        
         PHFetchOptions *options = [PHFetchOptions new];
         options.predicate = [NSPredicate predicateWithFormat:@"mediaType = %d",PHAssetMediaTypeImage];
         options.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
-
+        
         PHFetchResult *assetsFetchResult = [PHAsset fetchAssetsInAssetCollection:collection options:options];
         if (assetsFetchResult.count > 0) {
-
-            // put the "all photos" in the first index
             if (collection.assetCollectionSubtype == PHAssetCollectionSubtypeSmartAlbumUserLibrary) {
-                [allAblums insertObject:@{@"collection": collection
+                [allAlbums insertObject:@{@"collection": collection
                                           , @"assets": assetsFetchResult} atIndex:0];
             }
             else {
-                [allAblums addObject:@{@"collection": collection
+                [allAlbums addObject:@{@"collection": collection
                                        , @"assets": assetsFetchResult}];
             }
         }
     }
-    self.collectionItems = [allAblums copy];
+    
+    // 유저가 만든 모든 앨범.(아이튠즈 동기화 앨범 포함. 스마트 앨범은 포함안됨.)
+    for (PHAssetCollection *collection in userAlbums) {
+        
+        PHFetchOptions *options = [PHFetchOptions new];
+        options.predicate = [NSPredicate predicateWithFormat:@"mediaType = %d",PHAssetMediaTypeImage];
+        options.sortDescriptors = @[[NSSortDescriptor sortDescriptorWithKey:@"creationDate" ascending:NO]];
+        
+        PHFetchResult *assetsFetchResult = [PHAsset fetchAssetsInAssetCollection:collection options:options];
+        if (assetsFetchResult.count > 0) {
+            
+            // put the "all photos" in the first index
+            if (collection.assetCollectionSubtype == PHAssetCollectionSubtypeSmartAlbumUserLibrary) {
+                [allAlbums insertObject:@{@"collection": collection
+                                          , @"assets": assetsFetchResult} atIndex:0];
+            }
+            else {
+                [allAlbums addObject:@{@"collection": collection
+                                       , @"assets": assetsFetchResult}];
+            }
+        }
+    }
+    
+    self.collectionItems = [allAlbums copy];
 }
 
 - (void)setupCellSize
